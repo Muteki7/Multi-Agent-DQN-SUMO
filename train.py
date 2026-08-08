@@ -15,6 +15,7 @@ simulation steps do I want" number so this stays intuitive -- see
 import os
 from sumo_env import SumoEnvironment
 from sumo_vec_env import SumoVecEnv
+from traffic_metrics_callback import TrafficMetricsCallback
 from stable_baselines3 import DQN
 from stable_baselines3.common.vec_env import VecMonitor
 from stable_baselines3.common.results_plotter import load_results, ts2xy
@@ -24,9 +25,6 @@ import matplotlib.pyplot as plt
 # The original hardcoded an absolute Windows path; this defaults to a
 # `maps/` folder next to this script instead, which works regardless of OS
 # or whether you're running this natively or under WSL2.
-
-#We are linking all the paths, sumo.exe to run the gui, maps to find the network and the route files, we also have model_dir and log_dir both which we create in our code
-#The reason we are mentioning this now itself is since once it's created it needs to know where to be stored, os.join stores it in the main file
 BASE_DIR = r"D:\Users\NK\Resume\Projects_to_Github\Multi-Agent-SUMO_DQN"
 MAPS_DIR = os.path.join(BASE_DIR, "Maps")
 SUMO_NET_PATH = os.path.join(MAPS_DIR, "network2.net.xml")
@@ -41,15 +39,16 @@ def build_env(gui=False, max_episode_steps=950):
     VecMonitor logs per-episode reward/length to a CSV in LOG_DIR so we can
     plot the training curve afterward without hand-rolling reward tracking.
     """
-    #As we build our enviornment we create log_dir if it doesn't exist
     os.makedirs(LOG_DIR, exist_ok=True)
     sumo_env = SumoEnvironment(
-        SUMO_NET_PATH, SUMO_ROUTE_PATH, gui=gui, max_episode_steps=max_episode_steps, sumo_home=r"C:\Program Files (x86)\Eclipse\Sumo"
+        SUMO_NET_PATH, SUMO_ROUTE_PATH, gui=gui, max_episode_steps=max_episode_steps
     )
-
-    #We wrap our sumo enviornmet in a vectorized enviorment
     vec_env = SumoVecEnv(sumo_env)
-    vec_env = VecMonitor(vec_env, filename=os.path.join(LOG_DIR, "monitor"))
+    vec_env = VecMonitor(
+        vec_env,
+        filename=os.path.join(LOG_DIR, "monitor"),
+        info_keywords=("metric_avg_waiting_time", "metric_avg_queue_length", "metric_throughput"),
+    )
     return vec_env
 
 
@@ -81,7 +80,8 @@ def train(desired_sim_steps=9_500, max_episode_steps=950):
         verbose=1,
     )
 
-    model.learn(total_timesteps=total_timesteps)
+    metrics_callback = TrafficMetricsCallback(window=10)
+    model.learn(total_timesteps=total_timesteps, callback=metrics_callback)
 
     final_model_path = os.path.join(MODEL_DIR, "shared_dqn_final")
     model.save(final_model_path)
@@ -98,13 +98,31 @@ def plot_training_curve():
     if df.empty:
         print("No completed episodes were logged -- nothing to plot.")
         return
+
     x, y = ts2xy(df, "timesteps")
-    plt.figure(figsize=(10, 5))
-    plt.plot(x, y)
-    plt.xlabel("Timesteps")
-    plt.ylabel("Episode reward (summed per-agent reward per episode)")
-    plt.title("Shared DQN Training Reward")
-    plt.grid(True)
+    fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+
+    axes[0, 0].plot(x, y)
+    axes[0, 0].set_title("Episode reward (proxy objective)")
+    axes[0, 0].set_xlabel("Timesteps")
+    axes[0, 0].grid(True)
+
+    metric_panels = [
+        ("metric_avg_waiting_time", axes[0, 1], "Avg waiting time (lower is better)"),
+        ("metric_avg_queue_length", axes[1, 0], "Avg queue length (lower is better)"),
+        ("metric_throughput", axes[1, 1], "Throughput (higher is better)"),
+    ]
+    for col, ax, title in metric_panels:
+        if col in df.columns:
+            ax.plot(x, df[col])
+            ax.set_title(title)
+            ax.set_xlabel("Timesteps")
+            ax.grid(True)
+        else:
+            ax.set_visible(False)
+
+    fig.suptitle("Proxy reward vs. actual task metrics -- these should trend together")
+    fig.tight_layout()
     out_path = os.path.join(LOG_DIR, "training_curve.png")
     plt.savefig(out_path)
     print(f"Training curve saved to {out_path}")

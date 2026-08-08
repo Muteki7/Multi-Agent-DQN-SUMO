@@ -30,7 +30,6 @@ class SumoVecEnv(VecEnv):
         self.sumo_env = sumo_env
         self._actions = None
         super().__init__(
-            #Number of envs = number of junctions in sumo network
             num_envs=len(sumo_env.junction_ids),
             observation_space=sumo_env.observation_space,
             action_space=sumo_env.action_space,
@@ -74,6 +73,16 @@ class SumoVecEnv(VecEnv):
             for i in range(self.num_envs):
                 infos[i]["terminal_observation"] = obs[i]
                 infos[i]["episode_metrics"] = episode_metrics
+
+                # VecMonitor's info_keywords mechanism only supports flat
+                # scalar values (it writes one CSV column per key), so the
+                # nested dict above isn't usable there directly -- these
+                # flattened `metric_*` keys are what VecMonitor should be
+                # given, while `episode_metrics` above is what the
+                # TensorBoard callback and evaluate.py read.
+                for key, value in episode_metrics.items():
+                    infos[i][f"metric_{key}"] = value
+
             _, per_agent_obs = self.sumo_env.reset()
             obs = self._stack_obs(per_agent_obs)
 
