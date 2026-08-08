@@ -197,7 +197,7 @@
     <vehicle id="60" depart="60.00" type="car">
         <route edges="gneE5 gneE7 gneE4 gneE1 gneE23"/>
     </vehicle>
-    <vehicle id="61" depart="61.00" type="car">
+    <!-- <vehicle id="61" depart="61.00" type="car">
         <route edges="gneE5 gneE7 gneE4 gneE1 gneE23"/>
     </vehicle>
     <vehicle id="62" depart="62.00" type="car">
@@ -358,7 +358,7 @@
     </vehicle>
     <vehicle id="120" depart="120.00" type="car">
         <route edges="gneE2 gneE3"/>
-    </vehicle>
+    </vehicle> -->
     <!-- <vehicle id="121" depart="121.00" type="car">
         <route edges="gneE22 gneE2 gneE3 gneE8"/>
     </vehicle>

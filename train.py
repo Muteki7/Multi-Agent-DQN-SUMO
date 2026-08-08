@@ -52,7 +52,7 @@ def build_env(gui=False, max_episode_steps=950):
     return vec_env
 
 
-def train(desired_sim_steps=9_500, max_episode_steps=950):
+def train(desired_sim_steps=9_500, max_episode_steps=2000):
     os.makedirs(MODEL_DIR, exist_ok=True)
     vec_env = build_env(gui=False, max_episode_steps=max_episode_steps)
 
@@ -130,4 +130,4 @@ def plot_training_curve():
 
 
 if __name__ == "__main__":
-    train(desired_sim_steps=9_500, max_episode_steps=950)
+    train(desired_sim_steps=9_500, max_episode_steps=2000)

@@ -29,7 +29,7 @@ from pathlib import Path
 
 class SumoEnvironment(gym.Env):
     def __init__(self, net_file, route_file, gui=False, max_episode_steps=None,
-                 time_to_teleport=600, deadlock_waiting_time=3600, sumo_home=None):
+                 time_to_teleport=600, deadlock_waiting_time=7200, sumo_home=None):
         super().__init__()
         self.net_file = net_file
         self.route_file = route_file
@@ -201,15 +201,37 @@ class SumoEnvironment(gym.Env):
         max_waiting_time = max(snapshot["vehicle_waiting_time"].values(), default=0)
         deadlock_detected = max_waiting_time > self.deadlock_waiting_time
 
-        terminated = bool(no_vehicles_left or deadlock_detected)
+        #Only success when the network is cleared
+        terminated = bool(no_vehicles_left)
         truncated = bool(
+            deadlock_detected or
             self.max_episode_steps is not None and self.step_count >= self.max_episode_steps
         )
+
+        #Rewarding for clearing network and penalizing for deadlocks
+        bonus=0.0
+        if terminated:
+            bonus=100
+        elif deadlock_detected:
+            bonus=-100
+
+        elif self.max_episode_steps is not None and self.step_count >= self.max_episode_steps:
+            bonus=-10
+
+        total_reward +=bonus
 
         if deadlock_detected:
             print(f"Deadlock detected: max waiting time {max_waiting_time}s. Ending episode.")
 
-        info = {"per_agent_rewards": per_agent_rewards}
+        info = {
+            "per_agent_rewards": per_agent_rewards,
+            "Episode_end_reasons": (
+                "success" if terminated else
+                "deadlock" if deadlock_detected else
+                "timeout" if truncated else
+                "continue"
+            ),
+        }
         return (global_obs, per_agent_obs), total_reward, terminated, truncated, info
 
     def close(self):
@@ -284,7 +306,9 @@ class SumoEnvironment(gym.Env):
     def _compute_reward(self, action, snapshot):
         global_waiting_time = sum(snapshot["lane_waiting_time"].values())
         global_arrivals = snapshot["arrived_this_step"]
-        global_reward = (global_arrivals * 2.0) - (global_waiting_time / 3600.0)
+
+        #Making the agents care more about arrivals than waiting time, so more serious penalizing waiting time
+        global_reward = (global_arrivals * 5.0) - (global_waiting_time / 7200.0)
 
         per_agent_rewards = []
         total_reward = 0.0
@@ -293,7 +317,7 @@ class SumoEnvironment(gym.Env):
             queue_length, waiting_time, moving, avg_speed = self._lane_stats(controlled_lanes, snapshot)
 
             norm_queue = queue_length / 50.0
-            norm_waiting = waiting_time / 3600.0
+            norm_waiting = waiting_time / 7200.0
 
             local_reward = -(norm_queue * 0.5) - (norm_waiting * 0.5)
             reward = 0.3 * local_reward + 0.7 * global_reward
