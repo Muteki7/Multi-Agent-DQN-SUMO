@@ -67,15 +67,15 @@ def train(desired_sim_steps=9_500, max_episode_steps=950):
     model = DQN(
         "MlpPolicy",
         vec_env,
-        learning_rate=3e-4,
-        buffer_size=50_000,
+        learning_rate=4.6354919948565836e-4,
+        buffer_size=10_000,
         learning_starts=1_000,
-        batch_size=64,
-        gamma=0.99,
-        train_freq=1,              # learn after every real sim step
-        target_update_interval=1_000,
-        exploration_fraction=0.3,  # epsilon anneal over the first 30% of training
-        exploration_final_eps=0.02,
+        batch_size=32,
+        gamma=0.9255333029299476,
+        train_freq=8,              # learn after every real sim step
+        target_update_interval=500,
+        exploration_fraction=0.49477201339838284,  # epsilon anneal over the first 30% of training
+        exploration_final_eps=0.08957867548503272,
         tensorboard_log=LOG_DIR,
         verbose=1,
     )
