@@ -1,18 +1,20 @@
 """
-Custom SB3 callback that logs avg_waiting_time / avg_queue_length /
-throughput to TensorBoard every time a SUMO episode ends -- these appear
-alongside the built-in rollout/train charts under a `traffic/` tab, so you
-can compare "did the proxy reward go up" against "did the actual traffic
-outcome improve" side by side.
+Logs traffic metrics to TensorBoard using sumo-rl's built-in info dict --
+no custom TraCI snapshot code needed anymore, sumo-rl computes these already.
 
-This is the direct answer to "can we use VecMonitor for this": VecMonitor
-CAN log these (see the `metric_*` keys added in SumoVecEnv + the
-`info_keywords` argument in train.py) but it writes to a CSV file, not
-TensorBoard, and only supports flat scalar columns. Use VecMonitor's CSV for
-a clean, dedicated post-hoc plot of just these 3 metrics; use this callback
-for live, side-by-side comparison against ep_rew_mean/loss/etc. during
-training. Both read from the same underlying `episode_metrics` data -- pick
-whichever viewing surface suits the question you're asking.
+Two different kinds of values in that info dict, handled differently:
+- system_total_arrived / departed / teleported: CUMULATIVE counters, reset
+  on env.reset(). Valid to read directly at episode end -- as long as
+  sumo_rl_env.py's _FixResetClobberedInfo wrapper is in the env stack (it
+  is, by default in build_env()). Without it, SuperSuit's MarkovVectorEnv
+  silently overwrites these with post-reset zeros on the exact boundary
+  step; see that wrapper's docstring for the full story.
+  
+- system_mean_waiting_time / system_total_stopped / system_mean_speed:
+  INSTANTANEOUS snapshots, recomputed fresh every step. Reading these only
+  at episode end would give you just that one instant, not how the episode
+  behaved overall -- this callback accumulates a running mean across every
+  non-boundary step instead, same idea as the custom env's get_metrics().
 """
 
 from collections import deque
@@ -20,40 +22,58 @@ from stable_baselines3.common.callbacks import BaseCallback
 
 
 class TrafficMetricsCallback(BaseCallback):
-    """
-    Also exposes get_recent_mean(key), a rolling window average that the
-    Optuna pruning callback reuses instead of running a separate, expensive
-    evaluation episode.
-    """
-
     def __init__(self, window=10, verbose=0):
         super().__init__(verbose)
         self.window = window
         self.recent = {
             "avg_waiting_time": deque(maxlen=window),
-            "avg_queue_length": deque(maxlen=window),
+            "avg_stopped": deque(maxlen=window),
             "throughput": deque(maxlen=window),
+            "teleports": deque(maxlen=window),
         }
+        self._reset_accumulators()
+
+    def _reset_accumulators(self):
+        self._wait_sum = 0.0
+        self._stopped_sum = 0.0
+        self._n = 0
 
     def _on_step(self) -> bool:
         infos = self.locals.get("infos", [])
-        if infos and "episode_metrics" in infos[0]:
-            metrics = infos[0]["episode_metrics"]
-            for key, value in metrics.items():
-                self.logger.record(f"traffic/{key}", value)
-                if key in self.recent:
-                    self.recent[key].append(value)
+        if not infos:
+            return True
+        # Every agent's info dict carries an identical copy of the system_*
+        # keys (sumo-rl copies them to every agent each step -- verified
+        # against the library source), so infos[0] represents the whole
+        # simulation at this step; no need to loop over all agents.
+        info0 = infos[0]
+        episode_info = info0.get("episode")  # set by VecMonitor at episode boundaries
 
-            # Operationalizes the ep_len/ep_rew intuition from our
-            # conversation: total episode reward conflates "how good was
-            # each decision" with "how many decisions did we get to make."
-            # Dividing by episode length disentangles them. VecMonitor
-            # attaches this "episode" key to the same info dict.
-            episode_info = infos[0].get("episode")
-            if episode_info and episode_info.get("l", 0) > 0:
-                self.logger.record(
-                    "traffic/reward_per_step", episode_info["r"] / episode_info["l"]
-                )
+        if episode_info:
+            # Note: we do NOT fold this boundary step's own system_mean_*
+            # values into the running average -- they reflect the freshly
+            # auto-reset environment, not the episode that just ended.
+            avg_wait = self._wait_sum / max(self._n, 1)
+            avg_stopped = self._stopped_sum / max(self._n, 1)
+            throughput = info0.get("system_total_arrived", 0)
+            teleports = info0.get("system_total_teleported", 0)
+
+            self.logger.record("traffic/avg_waiting_time", avg_wait)
+            self.logger.record("traffic/avg_stopped", avg_stopped)
+            self.logger.record("traffic/throughput", throughput)
+            self.logger.record("traffic/teleports", teleports)
+            self.logger.record("traffic/reward_per_step", episode_info["r"] / max(episode_info["l"], 1))
+
+            self.recent["avg_waiting_time"].append(avg_wait)
+            self.recent["avg_stopped"].append(avg_stopped)
+            self.recent["throughput"].append(throughput)
+            self.recent["teleports"].append(teleports)
+
+            self._reset_accumulators()
+        else:
+            self._wait_sum += info0.get("system_mean_waiting_time", 0.0)
+            self._stopped_sum += info0.get("system_total_stopped", 0.0)
+            self._n += 1
         return True
 
     def get_recent_mean(self, key):

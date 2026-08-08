@@ -1,49 +1,38 @@
 """
 Hyperparameter search for the shared DQN traffic-signal policy, using Optuna
-with a MedianPruner to cut off unpromising trials early.
+with a MedianPruner -- rewritten to use sumo_rl_env.build_env() instead of
+the custom SumoEnvironment/SumoVecEnv pair. Everything else about the search
+design carries over unchanged from the custom-env version.
 
-Why avg_waiting_time as the single objective: Optuna's pruners (MedianPruner
-included) work against a single scalar per trial. You care about three
-things (waiting time down, queue down, throughput up); rather than inventing
-an arbitrary weighted combination of three differently-scaled quantities,
-this optimizes avg_waiting_time directly (the metric you emphasized most)
-and records avg_queue_length / throughput as trial user_attrs so you can
-still inspect and compare them across trials afterward -- see
-`inspect_results()` at the bottom. If you later want true multi-objective
-search (a Pareto front across all three), look at Optuna's native
-multi-objective studies (`optuna.create_study(directions=[...])`) -- note
-pruning support there is more limited than in single-objective studies,
-which is part of why this script sticks to single-objective + pruning.
+Single objective (avg_waiting_time), not three: MedianPruner needs one
+scalar per trial. avg_queue_length-equivalent (avg_stopped) and throughput
+are recorded as trial user_attrs so you can still compare them across
+trials without inventing an arbitrary weighted combination of differently-
+scaled quantities.
 
-MedianPruner intuition: at each reported step, a trial is pruned if its
-value so far is worse than the MEDIAN of all other trials' values at that
-same step -- but only after `n_startup_trials` trials have completed
-(so there's a real median to compare against) and after `n_warmup_steps`
-reports within the current trial (so a trial isn't killed before its metric
-has had a chance to stabilize).
-
-Practical note: every trial spawns a fresh `sumo` subprocess via TraCI. The
-`finally: vec_env.close()` block below is not optional -- without it, a
-pruned or failed trial leaks a SUMO process, and after 20-30 trials you'll
-have that many zombie SUMO processes running.
+Every trial closes its SUMO subprocess in a `finally` block -- not
+optional. Each trial spawns a fresh `sumo` subprocess via TraCI; without
+this, a pruned or failed trial leaks a SUMO process, and after 20-30 trials
+you'd have that many zombie processes running.
 """
 
 import optuna
 from optuna.pruners import MedianPruner
 
-from train import build_env
+from sumo_rl_env import build_env, DEFAULT_NET_FILE, DEFAULT_ROUTE_FILE
 from stable_baselines3 import DQN
 from stable_baselines3.common.callbacks import CallbackList
 from traffic_metrics_callback import TrafficMetricsCallback
 from optuna_pruning_callback import OptunaPruningCallback
 
-# Shorter than a full training run on purpose -- hyperparameter search needs
-# many trials, and each trial is a full SUMO run, so this trades per-trial
-# training quality for being able to run enough trials at all. Once you've
-# narrowed in on good hyperparameters, run train.py with the full
-# desired_sim_steps using the winning config.
-SEARCH_SIM_STEPS = 3_000
-SEARCH_MAX_EPISODE_STEPS = 500
+# Shorter than a full training run on purpose -- search needs many trials,
+# and each trial is a full SUMO run. Once you've found good hyperparameters,
+# run train.py with the full num_seconds/desired_rounds using the winner.
+SEARCH_NUM_SECONDS = 900
+SEARCH_ROUNDS = 3_000
+
+NET_FILE = DEFAULT_NET_FILE
+ROUTE_FILE = DEFAULT_ROUTE_FILE
 
 
 def objective(trial: optuna.Trial) -> float:
@@ -58,9 +47,9 @@ def objective(trial: optuna.Trial) -> float:
         exploration_final_eps=trial.suggest_float("exploration_final_eps", 0.01, 0.1),
     )
 
-    vec_env = build_env(gui=False, max_episode_steps=SEARCH_MAX_EPISODE_STEPS)
+    vec_env = build_env(net_file=NET_FILE, route_file=ROUTE_FILE, gui=False, num_seconds=SEARCH_NUM_SECONDS)
     try:
-        total_timesteps = SEARCH_SIM_STEPS * vec_env.num_envs
+        total_timesteps = SEARCH_ROUNDS * vec_env.num_envs
 
         model = DQN("MlpPolicy", vec_env, tensorboard_log=None, verbose=0, **hyperparams)
 
@@ -71,12 +60,11 @@ def objective(trial: optuna.Trial) -> float:
         model.learn(total_timesteps=total_timesteps, callback=CallbackList([metrics_cb, pruning_cb]))
 
         final_wait = metrics_cb.get_recent_mean("avg_waiting_time")
-        trial.set_user_attr("avg_queue_length", metrics_cb.get_recent_mean("avg_queue_length"))
+        trial.set_user_attr("avg_stopped", metrics_cb.get_recent_mean("avg_stopped"))
         trial.set_user_attr("throughput", metrics_cb.get_recent_mean("throughput"))
+        trial.set_user_attr("teleports", metrics_cb.get_recent_mean("teleports"))
 
         if final_wait is None:
-            # No episode completed at all in this trial's budget -- treat as
-            # a degenerate trial rather than reporting a misleading None/0.
             raise optuna.TrialPruned("No episodes completed within the trial budget.")
 
         return final_wait
@@ -84,13 +72,13 @@ def objective(trial: optuna.Trial) -> float:
         vec_env.close()
 
 
-def run_study(n_trials=30, study_name="dqn_traffic_tuning", storage="sqlite:///optuna_traffic.db"):
+def run_study(n_trials=30, study_name="dqn_traffic_tuning", storage=None):
     pruner = MedianPruner(n_startup_trials=5, n_warmup_steps=3, interval_steps=1)
     study = optuna.create_study(
         study_name=study_name,
-        direction="minimize",  # minimizing avg_waiting_time
+        direction="minimize",
         pruner=pruner,
-        storage=storage,       # e.g. "sqlite:///optuna_traffic.db" to persist/resume
+        storage=storage,
         load_if_exists=True,
     )
     study.optimize(objective, n_trials=n_trials)

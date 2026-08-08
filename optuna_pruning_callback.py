@@ -1,18 +1,16 @@
 """
 Reports a rolling-window average of avg_waiting_time to Optuna periodically
 and raises optuna.TrialPruned() when MedianPruner decides the trial isn't
-worth continuing.
+worth continuing. Unchanged from the custom-env version -- this callback
+only depends on TrafficMetricsCallback's rolling window, not on which
+environment produced it.
 
-Design note: the "correct" way to do Optuna pruning is usually to run a
-separate held-out evaluation episode periodically (e.g. via EvalCallback) so
-the pruning signal isn't just noisy training-time behavior. We're not doing
-that here because a SUMO episode is expensive -- running a full extra
-evaluation episode every N steps would roughly double total tuning time for
-every trial. Instead we reuse TrafficMetricsCallback's rolling window over
-recent *training* episodes as the pruning signal. This is a reasonable
-practical compromise, not a rigorous held-out evaluation -- worth knowing
-the difference if your search results ever look inconsistent with a later
-full training run.
+Design note: the "correct" way to do Optuna pruning is usually a separate
+held-out evaluation run, not training-time rollout metrics. We reuse
+TrafficMetricsCallback's rolling window instead because a SUMO episode is
+expensive enough that running a second one per report would roughly double
+search time. Worth knowing if search results ever look inconsistent with a
+full training run later.
 """
 
 import optuna
@@ -32,7 +30,7 @@ class OptunaPruningCallback(BaseCallback):
 
     def _on_step(self) -> bool:
         infos = self.locals.get("infos", [])
-        if infos and "episode_metrics" in infos[0]:
+        if infos and "episode" in infos[0]:
             self._episode_count += 1
             due = self._episode_count % self.eval_every_episodes == 0
             if due and self._episode_count != self._last_reported_count:
