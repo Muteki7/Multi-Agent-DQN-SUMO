@@ -65,6 +65,7 @@ class _FixResetClobberedInfo(VecEnvWrapper):
     """
 
     def __init__(self, venv):
+        #since it is a vectorized env, we need to use self.venv to access the underlying env
         super().__init__(venv)
         self._last_infos = [{} for _ in range(venv.num_envs)]
 
@@ -75,6 +76,7 @@ class _FixResetClobberedInfo(VecEnvWrapper):
 
     def step_wait(self):
         obs, rewards, dones, infos = self.venv.step_wait()
+        #fixed infos saves the custom infos keys (MONITOR_INFO_KEYWORDS) that are reset the moment the step ends this is a workaround so we can save the custom info keys
         fixed_infos = []
         for i, info in enumerate(infos):
             if dones[i]:

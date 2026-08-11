@@ -57,7 +57,7 @@ def train(desired_rounds=9_500, num_seconds=3600):
     model = DQN(
         "MlpPolicy",
         vec_env,
-        learning_rate=3e-4,
+        learning_rate=46354919948565836e-4,
         buffer_size=50_000,
         learning_starts=1_000,
         batch_size=64,

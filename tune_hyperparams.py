@@ -109,5 +109,5 @@ def inspect_results(study: optuna.Study):
 
 
 if __name__ == "__main__":
-    study = run_study(n_trials=30, storage="sqlite:///optuna_traffic.db")
+    study = run_study(n_trials=30, storage="sqlite:///optuna_Petting_zoo_traffic.db")
     inspect_results(study)
