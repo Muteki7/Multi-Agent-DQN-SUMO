@@ -51,11 +51,7 @@ Currently configured against the 4x4 grid network bundled with `sumo-rl` (16 sig
 
 ## Results
 
-![[Pasted image 20260814220857.png|605]]
 
-![[Pasted image 20260814220914.png|606]]
-
-![[Pasted image 20260814220946.png|608]]
 
 Mid evaluation view (95% of the network departed vehicles arrived.):
 
@@ -194,6 +190,8 @@ An earlier version of this environment used a hand-rolled TraCI wrapper with a r
 - The default reward function, `diff-waiting-time`, measures the *decrease* in total accumulated waiting time since the last decision, rather than a raw penalty sum. This also avoids a more subtle issue with length-scaled proxy rewards: a raw per-step penalty summed over an episode conflates "how good was each decision" with "how many decisions did the episode contain," which makes episode-length changes look like policy-quality changes even when they aren't.
 
 If you're extending this to your own SUMO network, the practical takeaway is: don't treat "unusual reward-vs-behavior mismatches" as necessarily a hyperparameter problem before checking whether the environment itself has a structural loophole like this one.
+
+[DQN_arch](Results/DQN_Arch.png)
 
 ### Hyperparameter Tuning: Optuna + MedianPruner
 
