@@ -9,7 +9,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
-from sumo_vec_env import SumoVecEnv
+from Old_files.sumo_vec_env import SumoVecEnv
 
 
 class MockSumoEnv(gym.Env):

@@ -10,8 +10,8 @@ from stable_baselines3 import DQN
 from stable_baselines3.common.vec_env import VecMonitor
 from stable_baselines3.common.callbacks import CallbackList
 
-from test_vecenv_mock import MockSumoEnv
-from sumo_vec_env import SumoVecEnv
+from Old_files.test_vecenv_mock import MockSumoEnv
+from Old_files.sumo_vec_env import SumoVecEnv
 from traffic_metrics_callback import TrafficMetricsCallback
 from optuna_pruning_callback import OptunaPruningCallback
 

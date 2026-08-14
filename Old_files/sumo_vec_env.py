@@ -22,7 +22,7 @@ together.
 import numpy as np
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
-from sumo_env import SumoEnvironment
+from Old_files.sumo_env import SumoEnvironment
 
 
 class SumoVecEnv(VecEnv):
