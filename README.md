@@ -54,7 +54,7 @@ Currently configured against the 4x4 grid network bundled with `sumo-rl` (16 sig
 
 ![traffic_teleport_throughput](Results/traffic_teleports_throughput.png)
 
-![traffic](Result/traffic.png)
+![traffic](/Results/traffic.png)
 
 ## Repository Structure
 
