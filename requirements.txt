@@ -3,6 +3,8 @@ matplotlib==3.11.1
 numpy==2.5.2
 optuna==4.9.0
 stable_baselines3==2.9.0
-sumo_rl==1.4.5
 supersuit==3.11.0
-traci==1.27.1
+pandas
+pettingzoo
+plotly
+tensorboard

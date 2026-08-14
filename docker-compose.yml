@@ -1,0 +1,33 @@
+#File allows us to run training and tensorboard --logdir=logs, this allows you to watch
+#tensorboard updates live
+
+services:
+  train:
+    build: . #builds image and mounts volumes if file doesn't exist then it creates them, all this happens for train.py
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+    command: python3 train.py
+
+  tune:
+    build: .
+    volumes:
+      - ./logs:/app/logs
+      - ./optuna_traffic.db:/app/optuna_traffic.db
+    command: python3 tune_hyperparams.py
+ 
+  evaluate:
+    build: .
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+    command: python3 evaluate.py
+ 
+  tensorboard:
+    build: .
+    volumes:
+      - ./logs:/app/logs
+    ports:
+      - "6006:6006"
+    command: tensorboard --logdir=logs --host=0.0.0.0
+  

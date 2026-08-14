@@ -1,0 +1,11 @@
+.git
+__pycache__/
+*.pyc
+logs/
+models/
+optuna_traffic.db
+optuna_results.csv
+optuna_history.html
+optuna_param_importances.html
+.venv/
+venv/
