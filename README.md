@@ -50,8 +50,11 @@ Currently configured against the 4x4 grid network bundled with `sumo-rl` (16 sig
 - **One Dockerfile, no local SUMO install required** — `docker compose run train` is the entire setup.
 
 ## Results
+![Rollout_ep_rew_mean](Results/Rollout_ep_rew_mean.png)
 
+![traffic_teleport_throughput](Results/traffic_teleport_throughput.png)
 
+![traffic](Result/traffic.png)
 
 Mid evaluation view (95% of the network departed vehicles arrived.):
 
@@ -191,7 +194,7 @@ An earlier version of this environment used a hand-rolled TraCI wrapper with a r
 
 If you're extending this to your own SUMO network, the practical takeaway is: don't treat "unusual reward-vs-behavior mismatches" as necessarily a hyperparameter problem before checking whether the environment itself has a structural loophole like this one.
 
-[DQN_arch](Results/DQN_Arch.png)
+![DQN_arch](Results/DQN_Arch.png)
 
 ### Hyperparameter Tuning: Optuna + MedianPruner
 
